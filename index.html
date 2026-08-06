@@ -1,0 +1,518 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Bebas+Neue&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/style.css" />
+    <title>MovieMatch — Coming Soon</title>
+    <meta property="og:image" content="https://bolt.new/static/og_default.png">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="https://bolt.new/static/og_default.png">
+</head>
+  <body>
+    <div id="root"></div>
+    <script type="module">
+      // ── Supabase config (REST API via fetch, no SDK) ──────────────────────
+      const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+      const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      const sbHeaders = {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+      };
+
+      async function sbSelect(table, query, eqCol, eqVal) {
+        const url = `${SUPABASE_URL}/rest/v1/${table}?select=${encodeURIComponent(query)}&${eqCol}=eq.${encodeURIComponent(eqVal)}&order=created_at.desc`;
+        const res = await fetch(url, { headers: sbHeaders });
+        if (!res.ok) throw new Error('Supabase error');
+        return res.json();
+      }
+
+      async function sbInsert(table, body, select) {
+        const url = `${SUPABASE_URL}/rest/v1/${table}?select=${encodeURIComponent(select)}`;
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { ...sbHeaders, Prefer: 'return=representation' },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) throw new Error('Supabase insert error');
+        return res.json();
+      }
+
+      async function sbUpdate(table, body, filters) {
+        const filterStr = Object.entries(filters).map(([k, v]) => `${k}=eq.${encodeURIComponent(v)}`).join('&');
+        const url = `${SUPABASE_URL}/rest/v1/${table}?${filterStr}`;
+        const res = await fetch(url, {
+          method: 'PATCH',
+          headers: { ...sbHeaders, Prefer: 'return=minimal' },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) throw new Error('Supabase update error');
+      }
+
+      async function sbDelete(table, filters) {
+        const filterStr = Object.entries(filters).map(([k, v]) => `${k}=eq.${encodeURIComponent(v)}`).join('&');
+        const url = `${SUPABASE_URL}/rest/v1/${table}?${filterStr}`;
+        const res = await fetch(url, { method: 'DELETE', headers: sbHeaders });
+        if (!res.ok) throw new Error('Supabase delete error');
+      }
+
+      // ── Data ──────────────────────────────────────────────────────────────
+      const genres = [
+        { name: 'Action', blurb: 'High-octane thrills, relentless pace, and explosive set pieces.', image: 'https://images.pexels.com/photos/7777517/pexels-photo-7777517.jpeg?auto=compress&cs=tinysrgb&h=650&w=940' },
+        { name: 'Horror', blurb: 'Spine-chilling tales that crawl under your skin and stay there.', image: 'https://images.pexels.com/photos/18473831/pexels-photo-18473831.jpeg?auto=compress&cs=tinysrgb&h=650&w=940' },
+        { name: 'Sci-Fi', blurb: 'Bold futures, deep space, and the boundaries of imagination.', image: 'https://images.pexels.com/photos/36941390/pexels-photo-36941390.jpeg?auto=compress&cs=tinysrgb&h=650&w=940' },
+        { name: 'Adventure', blurb: 'Epic journeys and daring quests into the unknown.', image: 'https://images.pexels.com/photos/6836495/pexels-photo-6836495.jpeg?auto=compress&cs=tinysrgb&h=650&w=940' },
+        { name: 'Animation', blurb: 'Hand-crafted worlds and stories for every age.', image: 'https://images.pexels.com/photos/163077/mario-yoschi-figures-funny-163077.jpeg?auto=compress&cs=tinysrgb&h=650&w=940' },
+        { name: 'Romance', blurb: 'Love stories that make your heart race and break.', image: 'https://images.pexels.com/photos/34767987/pexels-photo-34767987.jpeg?auto=compress&cs=tinysrgb&h=650&w=940' },
+        { name: 'Fantasy', blurb: 'Magic, myth, and worlds beyond our own.', image: 'https://images.pexels.com/photos/14924838/pexels-photo-14924838.jpeg?auto=compress&cs=tinysrgb&h=650&w=940' },
+        { name: 'Musical', blurb: 'Stories told in song, dance, and spectacle.', image: 'https://images.pexels.com/photos/7715781/pexels-photo-7715781.jpeg?auto=compress&cs=tinysrgb&h=650&w=940' },
+        { name: 'Crime', blurb: 'Heists, mysteries, and the shadows of the underworld.', image: 'https://images.pexels.com/photos/104707/pexels-photo-104707.jpeg?auto=compress&cs=tinysrgb&h=650&w=940' },
+        { name: 'Comedy', blurb: 'Big laughs, sharp wit, and feel-good fun.', image: 'https://images.pexels.com/photos/18652046/pexels-photo-18652046.jpeg?auto=compress&cs=tinysrgb&h=650&w=940' },
+        { name: 'Thriller', blurb: 'Edge-of-your-seat suspense that never lets up.', image: 'https://images.pexels.com/photos/7231488/pexels-photo-7231488.jpeg?auto=compress&cs=tinysrgb&h=650&w=940' },
+        { name: 'Drama', blurb: 'Powerful stories that move and stay with you.', image: 'https://images.pexels.com/photos/6896326/pexels-photo-6896326.jpeg?auto=compress&cs=tinysrgb&h=650&w=940' },
+      ];
+
+      const movies = [
+        { id: 'the-furious', title: 'The Furious', year: 2025, rating: 7.3, runtime: '1h 53m', certificate: 'R', director: 'Kenji Tanigaki', cast: ['Xie Miao', 'Joe Taslim', 'Brian Le', 'Jeeja Yanin'], genres: ['Action', 'Crime', 'Thriller'], tagline: 'No limits. No mercy. No escape.', synopsis: 'A father fights fiercely against ruthless kidnappers to save his abducted daughter, plunging into a criminal empire with only his fists and an unlikely ally — a journalist who refuses to look away.', poster: 'https://m.media-amazon.com/images/M/MV5BZTU4OGRhYjktY2YzZC00ODg2LWJkYzYtN2VmNmEyNWUxMmNjXkEyXkFqcGc@._V1_.jpg', backdrop: 'https://m.media-amazon.com/images/M/MV5BODUyZjg2YzctNGE3Yi00YjhhLTkyZTItZTAwZTNhNDA1ODQzXkEyXkFqcGc@._V1_FMjpg_UX1000_.jpg', releaseDate: 'Sep 6, 2025', status: 'In Theaters' },
+        { id: 'mortal-kombat-ii', title: 'Mortal Kombat II', year: 2026, rating: 6.8, runtime: '2h 10m', certificate: 'R', director: 'Simon McQuoid', cast: ['Karl Urban', 'Adeline Rudolph', 'Jessica McNamee', 'Josh Lawson'], genres: ['Action', 'Fantasy', 'Adventure'], tagline: 'Fight for Earthrealm.', synopsis: 'Iconic fighters unite to defend Earthrealm from the rule of Shao Kahn. Johnny Cage joins forces with returning warriors in a no-holds-barred battle against a tyrant threatening the balance of their world.', poster: 'http://www.movieposters.com/cdn/shop/files/mortal-kombat-ii_b3ocwgkr_1024x1024.jpg?v=1774898759', backdrop: 'https://preview.redd.it/official-poster-for-mortal-kombat-2-v0-jgus7mp9kjie1.jpeg?auto=webp&s=9baceec9821121ed13aaaf4202f3ae779eb60001', releaseDate: 'May 8, 2026', status: 'Coming Soon' },
+        { id: 'the-rip', title: 'The Rip', year: 2026, rating: 6.8, runtime: '1h 53m', certificate: 'R', director: 'Joe Carnahan', cast: ['Matt Damon', 'Ben Affleck', 'Steven Yeun', 'Teyana Taylor'], genres: ['Action', 'Crime', 'Thriller'], tagline: 'Trust no one. Survive everyone.', synopsis: 'A group of Miami cops discovers a stash of millions in cash, leading to distrust as outsiders learn about the huge seizure — making them question who to rely on before the money tears them apart.', poster: 'https://m.media-amazon.com/images/M/MV5BNjIzMGY3MzMtNDVlMS00MGU1LTkyNTItMmI4Mzk0Mjg3OTBkXkEyXkFqcGc@._V1_.jpg', backdrop: 'https://m.media-amazon.com/images/M/MV5BZDk2ZDZiNDctY2Q3NS00YmVjLTg2YzctM2U0NTM5MTBmNTUxXkEyXkFqcGc@._V1_.jpg', releaseDate: 'Jan 16, 2026', status: 'Streaming' },
+        { id: 'john-wick-4', title: 'John Wick: Chapter 4', year: 2023, rating: 7.7, runtime: '2h 49m', certificate: 'R', director: 'Chad Stahelski', cast: ['Keanu Reeves', 'Donnie Yen', 'Bill Skarsgård', 'Laurence Fishburne'], genres: ['Action', 'Thriller'], tagline: 'No way back. One way out.', synopsis: 'John Wick uncovers a path to defeating the High Table. But before he can earn his freedom, Wick must face a new enemy with powerful alliances across the globe.', poster: 'https://image.tmdb.org/t/p/w500/vZloFAK7NmvMGKE7VkF5UHaz0I.jpg', backdrop: 'https://image.tmdb.org/t/p/original/xDMIl84Qo5Tsu62c9DGWhmPI67A.jpg', releaseDate: 'Mar 24, 2023', status: 'Streaming' },
+        { id: 'mission-impossible-dr', title: 'Mission: Impossible — Dead Reckoning', year: 2023, rating: 7.7, runtime: '2h 43m', certificate: 'PG-13', director: 'Christopher McQuarrie', cast: ['Tom Cruise', 'Hayley Atwell', 'Ving Rhames', 'Simon Pegg'], genres: ['Action', 'Thriller', 'Adventure'], tagline: 'The mission is everything.', synopsis: 'Ethan Hunt and his IMF team must track down a terrifying new weapon that threatens all of humanity before it falls into the wrong hands.', poster: 'https://image.tmdb.org/t/p/w500/NNxYkU70HPurnNCSiCjH3ZMyrU.jpg', backdrop: 'https://image.tmdb.org/t/p/original/1fFM87H2ctkSnEg6KdrJTLbXB5E.jpg', releaseDate: 'Jul 12, 2023', status: 'Streaming' },
+        { id: 'hereditary', title: 'Hereditary', year: 2018, rating: 7.3, runtime: '2h 7m', certificate: 'R', director: 'Ari Aster', cast: ['Toni Collette', 'Alex Wolff', 'Milly Shapiro', 'Gabriel Byrne'], genres: ['Horror', 'Drama'], tagline: 'Every family tree hides a secret.', synopsis: 'After the family matriarch passes away, a grieving family is haunted by increasingly disturbing occurrences, forcing them to unravel dark secrets that have been buried for generations.', poster: 'https://image.tmdb.org/t/p/w500/oVCtSYNSiVnGPmXSElsHVHU.jpg', backdrop: 'https://image.tmdb.org/t/p/original/bXOH1YqhCyBvtVL6MPKfbFMV1ry.jpg', releaseDate: 'Jun 8, 2018', status: 'Streaming' },
+        { id: 'a-quiet-place', title: 'A Quiet Place', year: 2018, rating: 7.5, runtime: '1h 30m', certificate: 'PG-13', director: 'John Krasinski', cast: ['Emily Blunt', 'John Krasinski', 'Millicent Simmonds', 'Noah Jupe'], genres: ['Horror', 'Sci-Fi', 'Thriller'], tagline: 'If they hear you, they hunt you.', synopsis: 'A family is forced to live in near silence while hiding from creatures that hunt by sound. As the family struggles to survive, they discover that the creatures may not be their only threat.', poster: 'https://image.tmdb.org/t/p/w500/nAU74GmpUk7t5iklEp3bufnDyga.jpg', backdrop: 'https://image.tmdb.org/t/p/original/roFthRCNVNMSlr3rEbO3AIGJJHD.jpg', releaseDate: 'Apr 6, 2018', status: 'Streaming' },
+        { id: 'get-out', title: 'Get Out', year: 2017, rating: 7.7, runtime: '1h 44m', certificate: 'R', director: 'Jordan Peele', cast: ['Daniel Kaluuya', 'Allison Williams', 'Bradley Whitford', 'Catherine Keener'], genres: ['Horror', 'Thriller'], tagline: "Just because you're invited, doesn't mean you're welcome.", synopsis: "A young Black man visits his white girlfriend's parents for the weekend, where his uneasiness about their oddly over-accommodating behavior grows until a terrifying truth is revealed.", poster: 'https://image.tmdb.org/t/p/w500/tFXcEccSQMf3lfhfXKSU9iRBpa3.jpg', backdrop: 'https://image.tmdb.org/t/p/original/uTMVQFB6O8lFBQu7q53vBxkH2cV.jpg', releaseDate: 'Feb 24, 2017', status: 'Streaming' },
+        { id: 'the-conjuring', title: 'The Conjuring', year: 2013, rating: 7.5, runtime: '1h 52m', certificate: 'R', director: 'James Wan', cast: ['Patrick Wilson', 'Vera Farmiga', 'Ron Livingston', 'Lili Taylor'], genres: ['Horror', 'Thriller'], tagline: 'Based on the true case files of the Warrens.', synopsis: 'Paranormal investigators Ed and Lorraine Warren work to help a family terrorized by a dark presence in their farmhouse. Forced to confront a powerful demonic entity, the Warrens find themselves caught in the most terrifying case of their lives.', poster: 'https://image.tmdb.org/t/p/w500/wVYREutTvI2tmxr6ujrHT704wGF.jpg', backdrop: 'https://image.tmdb.org/t/p/original/qSAez8rEHGPoTqxqQXSTBqxC5oA.jpg', releaseDate: 'Jul 19, 2013', status: 'Streaming' },
+        { id: 'midsommar', title: 'Midsommar', year: 2019, rating: 7.1, runtime: '2h 28m', certificate: 'R', director: 'Ari Aster', cast: ['Florence Pugh', 'Jack Reynor', 'Vilhelm Blomgren', 'William Jackson Harper'], genres: ['Horror', 'Drama'], tagline: 'Let the festivities begin.', synopsis: "A couple travels to Sweden to visit a rural hometown's fabled midsummer festival. What begins as an idyllic retreat quickly devolves into an increasingly violent and bizarre competition at the hands of a pagan cult.", poster: 'https://image.tmdb.org/t/p/w500/7LEI8ulZzO5gy9Ww2NVCrKmHeDZ.jpg', backdrop: 'https://image.tmdb.org/t/p/original/rj4LZFIbyR0oCLCgLFHPMSHieFy.jpg', releaseDate: 'Jul 3, 2019', status: 'Streaming' },
+        { id: 'dune-part-two', title: 'Dune: Part Two', year: 2024, rating: 8.5, runtime: '2h 46m', certificate: 'PG-13', director: 'Denis Villeneuve', cast: ['Timothée Chalamet', 'Zendaya', 'Rebecca Ferguson', 'Josh Brolin'], genres: ['Sci-Fi', 'Adventure', 'Drama'], tagline: 'Long live the fighters.', synopsis: 'Paul Atreides unites with Chani and the Fremen while on a warpath of revenge against the conspirators who destroyed his family. Facing a choice between the love of his life and the fate of the known universe, he must prevent a terrible future only he can foresee.', poster: 'https://image.tmdb.org/t/p/w500/1pdfLvkbY9ohJlCjQH2CZjjYVvJ.jpg', backdrop: 'https://image.tmdb.org/t/p/original/xOMo8BRK7PfcJv9JCnx7s5hj0PX.jpg', releaseDate: 'Mar 1, 2024', status: 'Streaming' },
+        { id: 'arrival', title: 'Arrival', year: 2016, rating: 7.9, runtime: '1h 56m', certificate: 'PG-13', director: 'Denis Villeneuve', cast: ['Amy Adams', 'Jeremy Renner', 'Forest Whitaker', 'Michael Stuhlbarg'], genres: ['Sci-Fi', 'Drama', 'Thriller'], tagline: 'Why are they here?', synopsis: 'When twelve alien spacecrafts land around the world, a linguist is recruited to determine whether they come in peace or are a threat. As tensions rise between nations, she and her team race to find answers — and uncovers a connection to her own life she never expected.', poster: 'https://image.tmdb.org/t/p/w500/x2FJsf1ElAgr63Y3PNPtJrcmpoe.jpg', backdrop: 'https://image.tmdb.org/t/p/original/uI9H3C4tnM0BcKCDgMZFH8UCCqO.jpg', releaseDate: 'Nov 11, 2016', status: 'Streaming' },
+        { id: 'interstellar', title: 'Interstellar', year: 2014, rating: 8.7, runtime: '2h 49m', certificate: 'PG-13', director: 'Christopher Nolan', cast: ['Matthew McConaughey', 'Anne Hathaway', 'Jessica Chastain', 'Michael Caine'], genres: ['Sci-Fi', 'Drama', 'Adventure'], tagline: 'Mankind was born on Earth. It was never meant to die here.', synopsis: "A team of explorers travels through a wormhole in space in an attempt to ensure humanity's survival. When Earth's future is threatened by crop failures and famine, a NASA pilot embarks on a mission beyond our galaxy.", poster: 'https://image.tmdb.org/t/p/w500/gEU2QniE6E77NI6lCU6MxlNBvIx.jpg', backdrop: 'https://image.tmdb.org/t/p/original/pbrkL804wvqItMVSm1Wr3JpbNjL.jpg', releaseDate: 'Nov 7, 2014', status: 'Streaming' },
+        { id: 'blade-runner-2049', title: 'Blade Runner 2049', year: 2017, rating: 8.0, runtime: '2h 44m', certificate: 'R', director: 'Denis Villeneuve', cast: ['Ryan Gosling', 'Harrison Ford', 'Ana de Armas', 'Robin Wright'], genres: ['Sci-Fi', 'Drama', 'Thriller'], tagline: 'The key to the future is finally unearthed.', synopsis: "A young blade runner discovers a long-buried secret that has the potential to plunge what's left of society into chaos. His discovery leads him on a quest to find Rick Deckard, a former blade runner who's been missing for thirty years.", poster: 'https://image.tmdb.org/t/p/w500/gajva2L0rPYkEWjzgFlBXCAVBE5.jpg', backdrop: 'https://image.tmdb.org/t/p/original/sOHnOmB3CHoMBLJQwWHnwkbgFaH.jpg', releaseDate: 'Oct 6, 2017', status: 'Streaming' },
+        { id: 'the-martian', title: 'The Martian', year: 2015, rating: 8.0, runtime: '2h 24m', certificate: 'PG-13', director: 'Ridley Scott', cast: ['Matt Damon', 'Jessica Chastain', 'Kristen Wiig', 'Jeff Daniels'], genres: ['Sci-Fi', 'Adventure', 'Drama'], tagline: 'Bring him home.', synopsis: 'An astronaut becomes stranded on Mars after his team assume him dead, and must rely on his ingenuity to find a way to signal to Earth that he is alive. NASA and a team of international scientists work tirelessly to bring him home.', poster: 'https://image.tmdb.org/t/p/w500/5aGhaIHYuQbqlHWvWYqMCnj40y2.jpg', backdrop: 'https://image.tmdb.org/t/p/original/sy3e2e4JwdAtd2oZGA2uIxAVgAu.jpg', releaseDate: 'Oct 2, 2015', status: 'Streaming' },
+        { id: 'jumanji-welcome', title: 'Jumanji: Welcome to the Jungle', year: 2017, rating: 7.0, runtime: '1h 59m', certificate: 'PG-13', director: 'Jake Kasdan', cast: ['Dwayne Johnson', 'Jack Black', 'Kevin Hart', 'Karen Gillan'], genres: ['Adventure', 'Comedy', 'Fantasy'], tagline: 'The game has changed.', synopsis: "Four teenagers are sucked into a magical video game, and the only way they can escape is to work together to finish the game. Each player must survive as the character they chose — who couldn't be more different from themselves.", poster: 'https://image.tmdb.org/t/p/w500/bXrZ5iHBwnpxWmouZJMbCBMuJBl.jpg', backdrop: 'https://image.tmdb.org/t/p/original/5cHzTChMB4J7ERkNQTbCH7bLqAy.jpg', releaseDate: 'Dec 20, 2017', status: 'Streaming' },
+        { id: 'uncharted', title: 'Uncharted', year: 2022, rating: 6.3, runtime: '1h 56m', certificate: 'PG-13', director: 'Ruben Fleischer', cast: ['Tom Holland', 'Mark Wahlberg', 'Antonio Banderas', 'Sophia Ali'], genres: ['Adventure', 'Action'], tagline: 'Fortune favors the bold.', synopsis: 'Street-smart Nathan Drake is recruited by seasoned treasure hunter Victor Sullivan to recover a fortune lost by Ferdinand Magellan 500 years ago. What starts as a heist job becomes a globe-trotting, white-knuckle race to reach the prize before the ruthless Santiago Moncada.', poster: 'https://image.tmdb.org/t/p/w500/tlZpSxYuBRoVJBOpUrPdQe9FmFq.jpg', backdrop: 'https://image.tmdb.org/t/p/original/z21nP5IHpYoNMK0EOTFJ5gK8J5E.jpg', releaseDate: 'Feb 18, 2022', status: 'Streaming' },
+        { id: 'indiana-jones-5', title: 'Indiana Jones and the Dial of Destiny', year: 2023, rating: 6.5, runtime: '2h 34m', certificate: 'PG-13', director: 'James Mangold', cast: ['Harrison Ford', 'Phoebe Waller-Bridge', 'Antonio Banderas', 'Toby Jones'], genres: ['Adventure', 'Action'], tagline: "He's always been a legend. Now he's on his own time.", synopsis: 'Archaeologist Indiana Jones races against time to retrieve a legendary artifact that could change the course of history. Against a backdrop of the space race between the US and Soviet Union, Indy must reckon with a mysterious new adversary.', poster: 'https://image.tmdb.org/t/p/w500/Af4bXE63pVsb2FtbW8uYIyPBadD.jpg', backdrop: 'https://image.tmdb.org/t/p/original/4gOTCRyYqoOKIBEJr8INQ4Hf4GL.jpg', releaseDate: 'Jun 30, 2023', status: 'Streaming' },
+        { id: 'the-lost-city', title: 'The Lost City', year: 2022, rating: 6.3, runtime: '1h 52m', certificate: 'PG-13', director: 'Aaron Nee, Adam Nee', cast: ['Sandra Bullock', 'Channing Tatum', 'Daniel Radcliffe', 'Brad Pitt'], genres: ['Adventure', 'Comedy', 'Romance'], tagline: 'The legend will survive.', synopsis: 'A reclusive romance novelist on a book tour with her cover model gets swept up in a kidnapping attempt that lands them both in a cutthroat jungle adventure, proving that life can be as exciting as the fiction she writes.', poster: 'https://image.tmdb.org/t/p/w500/jJKuHa9FuTTgZlsGBMpZbIlyMU0.jpg', backdrop: 'https://image.tmdb.org/t/p/original/iS2QFOyXYoAd6oJhXaT5vRdTnA1.jpg', releaseDate: 'Mar 25, 2022', status: 'Streaming' },
+        { id: 'spider-verse-across', title: 'Spider-Man: Across the Spider-Verse', year: 2023, rating: 8.7, runtime: '2h 20m', certificate: 'PG', director: 'Joaquim Dos Santos', cast: ['Shameik Moore', 'Hailee Steinfeld', 'Oscar Isaac', 'Jake Johnson'], genres: ['Animation', 'Action', 'Adventure'], tagline: "It's how you wear the mask that matters.", synopsis: 'Miles Morales catapults across the multiverse, where he encounters a team of Spider-People charged with protecting its very existence. When the heroes clash on how to handle a new threat, Miles must redefine what it means to be a hero.', poster: 'https://image.tmdb.org/t/p/w500/8Vt6mWEReuy4Of61Lnj5Xj704m8.jpg', backdrop: 'https://image.tmdb.org/t/p/original/nGxUxi3PzMbVK6ckiRMA90mJIi3.jpg', releaseDate: 'Jun 2, 2023', status: 'Streaming' },
+        { id: 'puss-in-boots-last-wish', title: 'Puss in Boots: The Last Wish', year: 2022, rating: 7.9, runtime: '1h 42m', certificate: 'PG', director: 'Joel Crawford', cast: ['Antonio Banderas', 'Salma Hayek', 'Harvey Guillén', 'Florence Pugh'], genres: ['Animation', 'Comedy', 'Adventure', 'Fantasy'], tagline: "He's a legend. He's a myth. He's got one life left.", synopsis: 'Puss in Boots discovers that his passion for adventure has taken its toll when he learns that he has burned through eight of his nine lives. He must set out on an epic journey to find the Last Wish and restore his nine lives before it is too late.', poster: 'https://image.tmdb.org/t/p/w500/kuf6dutpsT0vSVehic3EZIqkOBt.jpg', backdrop: 'https://image.tmdb.org/t/p/original/3CxUndGhUcZdt9B4Ej3gQMiSMVE.jpg', releaseDate: 'Dec 21, 2022', status: 'Streaming' },
+        { id: 'super-mario-bros', title: 'The Super Mario Bros. Movie', year: 2023, rating: 7.1, runtime: '1h 32m', certificate: 'PG', director: 'Aaron Horvath', cast: ['Chris Pratt', 'Anya Taylor-Joy', 'Charlie Day', 'Jack Black'], genres: ['Animation', 'Adventure', 'Comedy', 'Fantasy'], tagline: 'Giddyup!', synopsis: 'While working underground to fix a water main, Brooklyn plumbers Mario and Luigi are transported down a mysterious pipe and wander into a magical new world. Mario races to save Luigi while discovering his destiny.', poster: 'https://image.tmdb.org/t/p/w500/qNBAXBIQlnOThrVvA6mA2B5ggkl.jpg', backdrop: 'https://image.tmdb.org/t/p/original/9n2tJBplPbgR2ca05hS5CKXwP2c.jpg', releaseDate: 'Apr 5, 2023', status: 'Streaming' },
+        { id: 'elemental', title: 'Elemental', year: 2023, rating: 6.8, runtime: '1h 41m', certificate: 'PG', director: 'Peter Sohn', cast: ['Leah Lewis', 'Mamoudou Athie', 'Ronnie del Carmen', 'Shila Ommi'], genres: ['Animation', 'Romance', 'Comedy'], tagline: 'Opposites react.', synopsis: 'In a city where fire, water, land, and air residents live together, a fiery young woman and a go-with-the-flow guy are about to discover something elemental — that their differences make them stronger together.', poster: 'https://image.tmdb.org/t/p/w500/4Y1WNkd88JXmGfhtWR7dmDAo1T2.jpg', backdrop: 'https://image.tmdb.org/t/p/original/6nFSCXEVzXJhSVdlWsVAjVFv6ya.jpg', releaseDate: 'Jun 16, 2023', status: 'Streaming' },
+        { id: 'turning-red', title: 'Turning Red', year: 2022, rating: 7.0, runtime: '1h 40m', certificate: 'PG', director: 'Domee Shi', cast: ['Rosalie Chiang', 'Sandra Oh', 'Ava Morse', 'Hyein Park'], genres: ['Animation', 'Comedy', 'Fantasy'], tagline: 'Growing up is a beast.', synopsis: 'Thirteen-year-old Meilin turns into a giant red panda whenever she gets too excited. She must balance her new reality with being a star student and good daughter while navigating the whirlwind of adolescence.', poster: 'https://image.tmdb.org/t/p/w500/qSFm9YkDfRRBe5UVu1HyVWzAz4t.jpg', backdrop: 'https://image.tmdb.org/t/p/original/feBHMnYgKoTVoGCYYMhCdFj7JvC.jpg', releaseDate: 'Mar 11, 2022', status: 'Streaming' },
+        { id: 'anyone-but-you', title: 'Anyone But You', year: 2023, rating: 6.3, runtime: '1h 43m', certificate: 'R', director: 'Will Gluck', cast: ['Sydney Sweeney', 'Glen Powell', 'Alexandra Shipp', 'Darren Barnet'], genres: ['Romance', 'Comedy'], tagline: 'Sometimes two people who hate each other… really love each other.', synopsis: "After an amazing first date, Bea and Ben's chemistry turns ice-cold — until they find themselves at a wedding in Australia and decide to pretend to be a couple for the weekend.", poster: 'https://image.tmdb.org/t/p/w500/lurEK87kukWNaHd0zYnsi3yzJrs.jpg', backdrop: 'https://image.tmdb.org/t/p/original/yRt7MGBElkLQOYRvLTT1b3B1rcp.jpg', releaseDate: 'Dec 22, 2023', status: 'Streaming' },
+        { id: 'la-la-land', title: 'La La Land', year: 2016, rating: 8.0, runtime: '2h 8m', certificate: 'PG-13', director: 'Damien Chazelle', cast: ['Ryan Gosling', 'Emma Stone', 'John Legend', 'Rosemarie DeWitt'], genres: ['Romance', 'Musical', 'Drama'], tagline: "Here's to the ones who dream.", synopsis: 'While navigating their careers in Los Angeles, a pianist and an aspiring actress fall in love while attempting to reconcile their aspirations for the future with their roles as lovers in the present.', poster: 'https://image.tmdb.org/t/p/w500/ylXCdC106IKiarftHkcacasaAcb.jpg', backdrop: 'https://image.tmdb.org/t/p/original/nadTsXPgBpYWRHGJxJPttkgUV6s.jpg', releaseDate: 'Dec 9, 2016', status: 'Streaming' },
+        { id: 'crazy-rich-asians', title: 'Crazy Rich Asians', year: 2018, rating: 6.9, runtime: '2h 1m', certificate: 'PG-13', director: 'Jon M. Chu', cast: ['Constance Wu', 'Henry Golding', 'Michelle Yeoh', 'Gemma Chan'], genres: ['Romance', 'Comedy', 'Drama'], tagline: 'Wealth. Power. Family.', synopsis: "An American-born Chinese economics professor accompanies her boyfriend to his best friend's wedding in Singapore and becomes thrust into the lives of Asia's rich and famous.", poster: 'https://image.tmdb.org/t/p/w500/4OvCCYdoMnvhIm6DX8fIYBDk4F4.jpg', backdrop: 'https://image.tmdb.org/t/p/original/2o6FXvRHbFtKJtivqLm8VSsHpQb.jpg', releaseDate: 'Aug 15, 2018', status: 'Streaming' },
+        { id: 'the-notebook', title: 'The Notebook', year: 2004, rating: 7.8, runtime: '2h 3m', certificate: 'PG-13', director: 'Nick Cassavetes', cast: ['Ryan Gosling', 'Rachel McAdams', 'James Garner', 'Gena Rowlands'], genres: ['Romance', 'Drama'], tagline: 'Behind every great love is a great story.', synopsis: 'An elderly man reads a love story from a faded notebook to a fellow patient in a nursing home. The story is about a young couple who fall in love during the 1940s.', poster: 'https://image.tmdb.org/t/p/w500/rNzQyW4f8B8cQeg7Dgj3n6eT5k9.jpg', backdrop: 'https://image.tmdb.org/t/p/original/3TBD7176YCKcX2bdkBoNGRLHGFl.jpg', releaseDate: 'Jun 25, 2004', status: 'Streaming' },
+        { id: 'dungeons-dragons', title: 'Dungeons & Dragons: Honor Among Thieves', year: 2023, rating: 7.2, runtime: '2h 14m', certificate: 'PG-13', director: 'John Francis Daley', cast: ['Chris Pine', 'Michelle Rodriguez', 'Regé-Jean Page', 'Justice Smith'], genres: ['Fantasy', 'Adventure', 'Comedy'], tagline: "You'll believe in magic.", synopsis: 'A charming thief and a band of unlikely adventurers undertake an epic heist to retrieve a lost relic, but things go dangerously awry when they run afoul of the wrong people.', poster: 'https://image.tmdb.org/t/p/w500/A7AoNT06aRAc4SV89DwplComuna.jpg', backdrop: 'https://image.tmdb.org/t/p/original/ygOseDCLcOM0IrnHFRFQJtEbgkH.jpg', releaseDate: 'Mar 31, 2023', status: 'Streaming' },
+        { id: 'doctor-strange-mom', title: 'Doctor Strange in the Multiverse of Madness', year: 2022, rating: 6.9, runtime: '2h 6m', certificate: 'PG-13', director: 'Sam Raimi', cast: ['Benedict Cumberbatch', 'Elizabeth Olsen', 'Chiwetel Ejiofor', 'Benedict Wong'], genres: ['Fantasy', 'Action', 'Sci-Fi'], tagline: 'The multiverse is real.', synopsis: "Doctor Strange teams up with a mysterious teenager who can travel between multiverses in order to face a powerful adversary who intends to harness the girl's abilities.", poster: 'https://image.tmdb.org/t/p/w500/9Gtg2DzBhmYamXBS1hKAhiwbBKS.jpg', backdrop: 'https://image.tmdb.org/t/p/original/wcKFYIiVDvRURrzglV9bOoKyXer.jpg', releaseDate: 'May 6, 2022', status: 'Streaming' },
+        { id: 'the-batman', title: 'The Batman', year: 2022, rating: 7.8, runtime: '2h 56m', certificate: 'PG-13', director: 'Matt Reeves', cast: ['Robert Pattinson', 'Zoë Kravitz', 'Paul Dano', 'Colin Farrell'], genres: ['Crime', 'Action', 'Thriller', 'Fantasy'], tagline: 'Unmask the truth.', synopsis: "When the Riddler, a sadistic serial killer, begins murdering key political figures in Gotham City, Batman is forced to investigate the city's hidden corruption and question his family's involvement.", poster: 'https://image.tmdb.org/t/p/w500/74xTEgt7R36Fpooo50r9T25onhq.jpg', backdrop: 'https://image.tmdb.org/t/p/original/b0PlSFdDwbyK0cf5RxwDpaOJQvQ.jpg', releaseDate: 'Mar 4, 2022', status: 'Streaming' },
+        { id: 'black-adam', title: 'Black Adam', year: 2022, rating: 6.3, runtime: '2h 4m', certificate: 'PG-13', director: 'Jaume Collet-Serra', cast: ['Dwayne Johnson', 'Aldis Hodge', 'Pierce Brosnan', 'Noah Centineo'], genres: ['Fantasy', 'Action'], tagline: 'The hierarchy of power in the DC Universe is about to change.', synopsis: 'Nearly 5,000 years after he was bestowed with the almighty powers of the Egyptian gods — and imprisoned just as quickly — Black Adam is freed from his earthly tomb, ready to unleash his unique form of justice on the modern world.', poster: 'https://image.tmdb.org/t/p/w500/pFlaoHTZeyNkG83vxsAJiGzfSsa.jpg', backdrop: 'https://image.tmdb.org/t/p/original/bQXAqRx2Fgc46uCVWgoPz5L5Dtr.jpg', releaseDate: 'Oct 21, 2022', status: 'Streaming' },
+        { id: 'the-greatest-showman', title: 'The Greatest Showman', year: 2017, rating: 7.6, runtime: '1h 45m', certificate: 'PG', director: 'Michael Gracey', cast: ['Hugh Jackman', 'Zac Efron', 'Michelle Williams', 'Rebecca Ferguson'], genres: ['Musical', 'Drama', 'Romance'], tagline: 'Dare to dream.', synopsis: 'Celebrates the birth of show business and tells of a visionary who rose from nothing to create a spectacle that became a worldwide sensation. P.T. Barnum builds a circus empire from scratch, inspiring those around him with his boundless imagination.', poster: 'https://image.tmdb.org/t/p/w500/b9CkDQXWYBTkHIpmdRzMwLFTsZk.jpg', backdrop: 'https://image.tmdb.org/t/p/original/ekZobS8isE6mA53RAiGDG93hBxL.jpg', releaseDate: 'Dec 20, 2017', status: 'Streaming' },
+        { id: 'in-the-heights', title: 'In the Heights', year: 2021, rating: 7.4, runtime: '2h 23m', certificate: 'PG-13', director: 'Jon M. Chu', cast: ['Anthony Ramos', 'Corey Hawkins', 'Leslie Grace', 'Melissa Barrera'], genres: ['Musical', 'Drama', 'Romance'], tagline: 'Home is everything.', synopsis: 'A film adaptation of the hit Broadway musical set in the Washington Heights neighborhood of Upper Manhattan, following the lives, loves, and dreams of a vibrant community.', poster: 'https://image.tmdb.org/t/p/w500/tVxDe8sGDdzFDMhbBUqKYC0RDWR.jpg', backdrop: 'https://image.tmdb.org/t/p/original/owqhNRWJRWY6c9cQLbM4L2DGOIb.jpg', releaseDate: 'Jun 11, 2021', status: 'Streaming' },
+        { id: 'mamma-mia-2', title: 'Mamma Mia! Here We Go Again', year: 2018, rating: 6.8, runtime: '1h 54m', certificate: 'PG-13', director: 'Ol Parker', cast: ['Lily James', 'Amanda Seyfried', 'Meryl Streep', 'Pierce Brosnan'], genres: ['Musical', 'Comedy', 'Romance'], tagline: 'Here we go again.', synopsis: "In this sequel to Mamma Mia!, Sophie prepares for the grand reopening of the Hotel Bella Donna as she learns more about her mother's past. Set in the present and past, the film shows how young Donna met three men who could each be the father of Sophie.", poster: 'https://image.tmdb.org/t/p/w500/wgJGdCVB7YhCMuyqg9M7fQMnNjZ.jpg', backdrop: 'https://image.tmdb.org/t/p/original/n6DpmJhFLDyLfUdUGGhxiDzXsEk.jpg', releaseDate: 'Jul 20, 2018', status: 'Streaming' },
+        { id: 'tick-tick-boom', title: 'tick, tick... BOOM!', year: 2021, rating: 7.5, runtime: '1h 55m', certificate: 'PG-13', director: 'Lin-Manuel Miranda', cast: ['Andrew Garfield', 'Alexandra Shipp', 'Robin de Jesús', 'Joshua Henry'], genres: ['Musical', 'Drama', 'Biography'], tagline: 'Time is running out.', synopsis: 'Jonathan Larson works as a waiter while writing and composing his musical SUPERBIA. On the eve of his 30th birthday, Jon is faced with an impossible choice: follow his dreams or take the path of least resistance.', poster: 'https://image.tmdb.org/t/p/w500/uLH7ll8gUXyXTBjNBBCfuNjBrGL.jpg', backdrop: 'https://image.tmdb.org/t/p/original/z6Ct7gLlHEsFPyamTlGja7eMV0J.jpg', releaseDate: 'Nov 19, 2021', status: 'Streaming' },
+        { id: 'motor-city', title: 'Motor City', year: 2025, rating: 6.4, runtime: '1h 48m', certificate: 'R', director: 'Chad St. John', cast: ['Alan Ritchson', 'Ben Foster', 'Ben McKenzie', 'Amar Chadha-Patel'], genres: ['Crime', 'Drama', 'Thriller'], tagline: "They took his life. He's taking it back.", synopsis: 'In 1970s Detroit, John Miller falls in love with the girlfriend of a local gangster. To get revenge, the gangster frames Miller and sends him to prison. With his life ruined, Miller returns to settle the score.', poster: 'https://a.ltrbxd.com/resized/film-poster/7/3/6/5/1/73651-motor-city-0-230-0-345-crop.jpg?v=823396016b', backdrop: 'https://m.media-amazon.com/images/M/MV5BZGFmNTJkNzctNDc2Zi00ZWMxLWIzNzktNDQxMzU3ZGVkZTRjXkEyXkFqcGc@._V1_FMjpg_UX1000_.jpg', releaseDate: '2025', status: 'Coming Soon' },
+        { id: 'knives-out', title: 'Knives Out', year: 2019, rating: 7.9, runtime: '2h 10m', certificate: 'PG-13', director: 'Rian Johnson', cast: ['Daniel Craig', 'Chris Evans', 'Ana de Armas', 'Jamie Lee Curtis'], genres: ['Crime', 'Comedy', 'Thriller'], tagline: 'Hell of a house.', synopsis: 'When renowned crime novelist Harlan Thrombey is found dead at his estate just after his 85th birthday, the inquisitive and debonair Detective Benoit Blanc is mysteriously enlisted to investigate.', poster: 'https://image.tmdb.org/t/p/w500/pThyQovXQrpS44MVShsfxzBMTSQ.jpg', backdrop: 'https://image.tmdb.org/t/p/original/mY7SeH4HFFxW1hiI6cWuwCRKptN.jpg', releaseDate: 'Nov 27, 2019', status: 'Streaming' },
+        { id: 'zodiac', title: 'Zodiac', year: 2007, rating: 7.7, runtime: '2h 37m', certificate: 'R', director: 'David Fincher', cast: ['Jake Gyllenhaal', 'Mark Ruffalo', 'Robert Downey Jr.', 'Anthony Edwards'], genres: ['Crime', 'Drama', 'Thriller'], tagline: "There's more than one way to lose your life to a killer.", synopsis: 'In the late 1960s and 1970s, a cartoonist at a San Francisco newspaper becomes an amateur detective obsessed with tracking down the Zodiac Killer — a serial murderer who taunts police with cryptic messages.', poster: 'https://image.tmdb.org/t/p/w500/ogl6YAYkMFNEzNKml2V7LxI25B8.jpg', backdrop: 'https://image.tmdb.org/t/p/original/jkPbGMxFGFzaKFomLPl45ykiJhI.jpg', releaseDate: 'Mar 2, 2007', status: 'Streaming' },
+        { id: 'over-your-dead-body', title: 'Over Your Dead Body', year: 2026, rating: 6.3, runtime: '1h 45m', certificate: 'R', director: 'Jorma Taccone', cast: ['Samara Weaving', 'Jason Segel', 'Timothy Olyphant', 'Juliet Lewis'], genres: ['Comedy', 'Thriller', 'Action'], tagline: 'Breakups are all in the execution.', synopsis: 'A dysfunctional couple head to a remote cabin to salvage their relationship, only to find that the only way out of their toxic marriage might be murder. A darkly funny, blood-soaked ride.', poster: 'https://m.media-amazon.com/images/M/MV5BMWU2M2YyNTMtZGM4ZC00MDcwLWI3NmItZWM0YjIyOTEyNDZhXkEyXkFqcGc@._V1_FMjpg_UX1000_.jpg', backdrop: 'https://m.media-amazon.com/images/M/MV5BMzE5OTMzYWMtYTJiOC00Njg0LTlmZTktNzVlM2ZiZGQzZjk0XkEyXkFqcGc@._V1_.jpg', releaseDate: 'Apr 24, 2026', status: 'Coming Soon' },
+        { id: 'game-night', title: 'Game Night', year: 2018, rating: 7.0, runtime: '1h 40m', certificate: 'R', director: 'John Francis Daley', cast: ['Jason Bateman', 'Rachel McAdams', 'Billy Magnussen', 'Sharon Horgan'], genres: ['Comedy', 'Thriller'], tagline: 'Game night just got complicated.', synopsis: "A group of friends who meet regularly for game nights find themselves in a real-life mystery when the host's brother is seemingly kidnapped by dangerous gangsters during one of their evenings.", poster: 'https://image.tmdb.org/t/p/w500/fGLjPVJxGu9AJHLT1P3UKq6kKjP.jpg', backdrop: 'https://image.tmdb.org/t/p/original/oQy2oV1mMR9PJoRCMirqniC9KJI.jpg', releaseDate: 'Feb 23, 2018', status: 'Streaming' },
+        { id: 'the-nice-guys', title: 'The Nice Guys', year: 2016, rating: 7.9, runtime: '1h 56m', certificate: 'R', director: 'Shane Black', cast: ['Russell Crowe', 'Ryan Gosling', 'Angourie Rice', 'Matt Bomer'], genres: ['Comedy', 'Crime', 'Action'], tagline: "They're not great at their job. But they're trying.", synopsis: 'In 1970s Los Angeles, a mismatched pair of private eyes investigate a missing girl and the mysterious death of a porn star. Their case draws them deeper into the seedy underbelly of the city.', poster: 'https://image.tmdb.org/t/p/w500/2BuAy7oS7IsO1iNPZkAFzaJuT7n.jpg', backdrop: 'https://image.tmdb.org/t/p/original/3b0A3f8vEqvdV6h6nOjpbPHxOMD.jpg', releaseDate: 'May 20, 2016', status: 'Streaming' },
+        { id: 'superbad', title: 'Superbad', year: 2007, rating: 7.6, runtime: '1h 53m', certificate: 'R', director: 'Greg Mottola', cast: ['Jonah Hill', 'Michael Cera', 'Christopher Mintz-Plasse', 'Bill Hader'], genres: ['Comedy'], tagline: "He's not that superbad. He's supergood.", synopsis: 'Two co-dependent high school seniors are forced to deal with separation anxiety after their plan to score alcohol for a party goes awry. A hilarious and touching story of friendship on the edge of adulthood.', poster: 'https://image.tmdb.org/t/p/w500/ek8e8txUyUwd2BNqj6lFEerMfPB.jpg', backdrop: 'https://image.tmdb.org/t/p/original/oaYZx7tCEnjiSzFQJ6MjJtyGHHO.jpg', releaseDate: 'Aug 17, 2007', status: 'Streaming' },
+        { id: 'gone-girl', title: 'Gone Girl', year: 2014, rating: 8.1, runtime: '2h 29m', certificate: 'R', director: 'David Fincher', cast: ['Ben Affleck', 'Rosamund Pike', 'Neil Patrick Harris', 'Tyler Perry'], genres: ['Thriller', 'Drama', 'Crime'], tagline: "You don't know what you've got 'til it's gone.", synopsis: "With his wife's disappearance having become the focus of an intense media circus, a man sees the spotlight turned on him when it becomes clear that he and his wife had a lot of secrets.", poster: 'https://image.tmdb.org/t/p/w500/fSRb7vyIP8rQpL0I47P3qUsEKX3.jpg', backdrop: 'https://image.tmdb.org/t/p/original/gHGCRtRqNqWNPURRBAwYXmMoLMI.jpg', releaseDate: 'Oct 3, 2014', status: 'Streaming' },
+        { id: 'parasite', title: 'Parasite', year: 2019, rating: 8.5, runtime: '2h 12m', certificate: 'R', director: 'Bong Joon Ho', cast: ['Song Kang-ho', 'Lee Sun-kyun', 'Cho Yeo-jeong', 'Choi Woo-shik'], genres: ['Thriller', 'Drama', 'Crime'], tagline: 'Act like you own the place.', synopsis: 'Greed and class discrimination threaten the newly formed symbiotic relationship between the wealthy Park family and the destitute Kim clan. A darkly funny and shocking thriller from master director Bong Joon Ho.', poster: 'https://image.tmdb.org/t/p/w500/7IiTTgloJzvGI1TAYymCfbfl3vT.jpg', backdrop: 'https://image.tmdb.org/t/p/original/TU9NIjwzjoKPwQHoHshkFcQUCG.jpg', releaseDate: 'May 30, 2019', status: 'Streaming' },
+        { id: 'prisoners', title: 'Prisoners', year: 2013, rating: 8.1, runtime: '2h 33m', certificate: 'R', director: 'Denis Villeneuve', cast: ['Hugh Jackman', 'Jake Gyllenhaal', 'Viola Davis', 'Maria Bello'], genres: ['Thriller', 'Crime', 'Drama'], tagline: 'Every moment counts.', synopsis: "When Keller Dover's daughter and her friend go missing, he takes matters into his own hands as the police pursue multiple leads and the pressure mounts. A haunting examination of the lengths a parent will go to protect their child.", poster: 'https://image.tmdb.org/t/p/w500/iMud73vhOgBPMVAIMDzpSYNsypB.jpg', backdrop: 'https://image.tmdb.org/t/p/original/g2N7aByVDO0CGNe5RwVRhNHiN2a.jpg', releaseDate: 'Sep 20, 2013', status: 'Streaming' },
+        { id: 'everything-everywhere', title: 'Everything Everywhere All at Once', year: 2022, rating: 7.8, runtime: '2h 19m', certificate: 'R', director: 'Daniel Kwan, Daniel Scheinert', cast: ['Michelle Yeoh', 'Stephanie Hsu', 'Jamie Lee Curtis', 'Ke Huy Quan'], genres: ['Drama', 'Comedy', 'Sci-Fi', 'Action'], tagline: 'A film about the joy of living.', synopsis: 'An aging Chinese immigrant is swept up in an insane adventure in which she alone can save the world by exploring other universes and connecting with the lives she could have led.', poster: 'https://image.tmdb.org/t/p/w500/w3LxiVYdWWRvEVdn5RYq6jIqkb1.jpg', backdrop: 'https://image.tmdb.org/t/p/original/ss0Os3uWJfQAENILHZUdX8Tt1OC.jpg', releaseDate: 'Mar 25, 2022', status: 'Streaming' },
+        { id: 'whiplash', title: 'Whiplash', year: 2014, rating: 8.5, runtime: '1h 46m', certificate: 'R', director: 'Damien Chazelle', cast: ['Miles Teller', 'J.K. Simmons', 'Paul Reiser', 'Melissa Benoist'], genres: ['Drama', 'Musical'], tagline: 'The road to greatness can take you to the edge.', synopsis: "A promising young drummer enrolls at a cut-throat music conservatory where his dreams of greatness are mentored by an instructor who will stop at nothing to realize a student's potential.", poster: 'https://image.tmdb.org/t/p/w500/7fn624j5lj3xTme2SgiLCeuedmO.jpg', backdrop: 'https://image.tmdb.org/t/p/original/fRGxZuo7jJUWQsVg9PREb98Aclp.jpg', releaseDate: 'Oct 10, 2014', status: 'Streaming' },
+        { id: 'a-beautiful-mind', title: 'A Beautiful Mind', year: 2001, rating: 8.2, runtime: '2h 15m', certificate: 'PG-13', director: 'Ron Howard', cast: ['Russell Crowe', 'Ed Harris', 'Jennifer Connelly', 'Paul Bettany'], genres: ['Drama', 'Biography'], tagline: 'He saw the world in a way no one could have imagined.', synopsis: 'After John Nash, a brilliant but asocial mathematician, accepts secret work in cryptography, his life takes a turn for the nightmarish. His genius is later rediscovered, leading to a Nobel Prize in economics.', poster: 'https://image.tmdb.org/t/p/w500/857uqFDCojRdWCqXIfQWtqiIHtg.jpg', backdrop: 'https://image.tmdb.org/t/p/original/5WCJkEsJAIwJ1kzOhp5eVHJQJUH.jpg', releaseDate: 'Dec 21, 2001', status: 'Streaming' },
+        { id: 'the-pursuit-of-happyness', title: 'The Pursuit of Happyness', year: 2006, rating: 8.0, runtime: '1h 57m', certificate: 'PG-13', director: 'Gabriele Muccino', cast: ['Will Smith', 'Jaden Smith', 'Thandiwe Newton', 'Brian Howe'], genres: ['Drama', 'Biography'], tagline: "Don't ever let someone tell you that you can't do something.", synopsis: 'A struggling salesman takes custody of his son as he is poised to begin a life-changing professional endeavor. Based on a true story of Chris Gardner, whose determination and courage led him from homelessness to the heights of Wall Street.', poster: 'https://image.tmdb.org/t/p/w500/lBuSjH9UN8Bk1ZrLAj7cSM5s6z6.jpg', backdrop: 'https://image.tmdb.org/t/p/original/7vKIhPxS3P5M9x0UAlU1UW9YtXr.jpg', releaseDate: 'Dec 15, 2006', status: 'Streaming' },
+      ];
+
+      // ── Helpers ───────────────────────────────────────────────────────────
+      function timeAgo(dateStr) {
+        const diff = Date.now() - new Date(dateStr).getTime();
+        const mins = Math.floor(diff / 60000);
+        if (mins < 1) return 'just now';
+        if (mins < 60) return `${mins}m ago`;
+        const hrs = Math.floor(mins / 60);
+        if (hrs < 24) return `${hrs}h ago`;
+        const days = Math.floor(hrs / 24);
+        if (days < 30) return `${days}d ago`;
+        const months = Math.floor(days / 30);
+        if (months < 12) return `${months}mo ago`;
+        return `${Math.floor(months / 12)}y ago`;
+      }
+
+      function getVoterId() {
+        let id = localStorage.getItem('mv_voter_id');
+        if (!id) {
+          id = crypto.randomUUID();
+          localStorage.setItem('mv_voter_id', id);
+        }
+        return id;
+      }
+
+      function starRating(rating) {
+        const filled = Math.round((rating / 10) * 5);
+        let html = '<div class="gp-stars">';
+        for (let i = 0; i < 5; i++) {
+          html += `<span class="gp-star ${i < filled ? 'gp-star--filled' : ''}">${i < filled ? '★' : '☆'}</span>`;
+        }
+        html += '</div>';
+        return html;
+      }
+
+      function esc(s) {
+        const d = document.createElement('div');
+        d.textContent = s;
+        return d.innerHTML;
+      }
+
+      // ── App state ─────────────────────────────────────────────────────────
+      let view = 'home';
+      let pickedGenre = null;
+      let selectedMovie = null;
+
+      const root = document.getElementById('root');
+
+      function render() {
+        document.body.style.overflow = selectedMovie ? 'hidden' : '';
+        if (view === 'home') {
+          renderHome();
+        } else if (view === 'genre' && pickedGenre) {
+          renderGenrePage();
+          if (selectedMovie) renderModal();
+        }
+      }
+
+      function renderHome() {
+        root.innerHTML = `
+          <section class="genre-page" id="top">
+            <header class="genre-header">
+              <div class="genre-header__inner">
+                <a href="#top" class="genre-header__logo">
+                  <span class="genre-header__logo-mark">MOVIE</span>
+                  <span class="genre-header__logo-sub">MATCH</span>
+                </a>
+                <button class="genre-header__signin">Sign In</button>
+              </div>
+            </header>
+            <div class="genre-hero">
+              <h1 class="genre-hero__title">What are you in the mood for?</h1>
+              <p class="genre-hero__sub">Pick a genre and we'll surface films you'll love.</p>
+            </div>
+            <div class="genre-grid">
+              ${genres.map(g => `
+                <button class="genre-card" data-genre="${esc(g.name)}">
+                  <div class="genre-card__image" style="background-image:url(${esc(g.image)})"></div>
+                  <div class="genre-card__overlay"></div>
+                  <div class="genre-card__content">
+                    <h3 class="genre-card__name">${esc(g.name)}</h3>
+                    <p class="genre-card__blurb">${esc(g.blurb)}</p>
+                  </div>
+                  <span class="genre-card__arrow">→</span>
+                </button>
+              `).join('')}
+            </div>
+            <footer class="genre-footer">
+              <span>© 2026 MovieMatch</span>
+              <span>Crafted for film lovers</span>
+            </footer>
+          </section>
+        `;
+        root.querySelectorAll('.genre-card').forEach(btn => {
+          btn.addEventListener('click', () => {
+            pickedGenre = btn.dataset.genre;
+            view = 'genre';
+            window.scrollTo(0, 0);
+            render();
+          });
+        });
+      }
+
+      function renderGenrePage() {
+        const filtered = movies.filter(m => m.genres.includes(pickedGenre));
+        root.innerHTML = `
+          <div class="gp-page">
+            <div class="gp-banner">
+              <div class="gp-banner__inner">
+                <button class="gp-back" id="back-btn">← MovieMatch</button>
+              </div>
+            </div>
+            <div class="gp-body">
+              <div class="gp-body__inner">
+                <h1 class="gp-title">${esc(pickedGenre)} Movies</h1>
+                ${filtered.length === 0
+                  ? '<p class="gp-empty">No movies in this genre yet. Check back soon.</p>'
+                  : `<div class="gp-grid">
+                      ${filtered.map(m => `
+                        <button class="gp-card" data-id="${esc(m.id)}">
+                          <div class="gp-card__top">
+                            <div class="gp-card__poster-wrap">
+                              ${m.poster
+                                ? `<img src="${esc(m.poster)}" alt="${esc(m.title)}" class="gp-card__poster" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+                                   <div class="gp-card__poster-fallback" style="display:none"><span>${esc(m.title.charAt(0))}</span></div>`
+                                : `<div class="gp-card__poster-fallback"><span>${esc(m.title.charAt(0))}</span></div>`}
+                            </div>
+                            ${starRating(m.rating)}
+                          </div>
+                          <div class="gp-card__body">
+                            <p class="gp-card__title">${esc(m.title)}</p>
+                            <p class="gp-card__synopsis">${esc(m.synopsis)}</p>
+                            <div class="gp-card__meta">
+                              <span class="gp-card__year">${m.year}</span>
+                              <span class="gp-card__runtime">${esc(m.runtime)}</span>
+                              <span class="gp-card__cert">${esc(m.certificate)}</span>
+                            </div>
+                          </div>
+                        </button>
+                      `).join('')}
+                    </div>`}
+              </div>
+            </div>
+            <footer class="gp-footer">
+              <span>© 2026 MovieMatch</span>
+              <span>Crafted for film lovers</span>
+            </footer>
+          </div>
+        `;
+        document.getElementById('back-btn').addEventListener('click', () => {
+          view = 'home';
+          pickedGenre = null;
+          window.scrollTo(0, 0);
+          render();
+        });
+        root.querySelectorAll('.gp-card').forEach(btn => {
+          btn.addEventListener('click', () => {
+            selectedMovie = movies.find(m => m.id === btn.dataset.id);
+            render();
+          });
+        });
+      }
+
+      function renderModal() {
+        const movie = selectedMovie;
+        const overlay = document.createElement('div');
+        overlay.className = 'modal';
+        overlay.innerHTML = `
+          <div class="modal__panel">
+            <button class="modal__close" aria-label="Close">✕</button>
+            <div class="modal__backdrop" style="background-image:url(${esc(movie.backdrop)})">
+              <div class="modal__backdrop-overlay"></div>
+            </div>
+            <div class="modal__content">
+              <div class="modal__head">
+                <img class="modal__poster" src="${esc(movie.poster)}" alt="${esc(movie.title)} poster" />
+                <div class="modal__head-info">
+                  <div class="modal__badges">
+                    <span class="modal__status">${esc(movie.status)}</span>
+                    <span class="modal__cert">${esc(movie.certificate)}</span>
+                  </div>
+                  <h2 class="modal__title">${esc(movie.title)}</h2>
+                  <div class="modal__stats">
+                    <span class="modal__rating">★ ${movie.rating}/10</span>
+                    <span>${movie.year}</span>
+                    <span>${esc(movie.runtime)}</span>
+                    <span>${esc(movie.releaseDate)}</span>
+                  </div>
+                  <p class="modal__tagline">"${esc(movie.tagline)}"</p>
+                  <div class="modal__genres">
+                    ${movie.genres.map(g => `<span class="modal__genre">${esc(g)}</span>`).join('')}
+                  </div>
+                  <div class="modal__actions">
+                    <button class="btn btn--ghost">+ Watchlist</button>
+                  </div>
+                  <div class="reactions">
+                    <button class="reaction" id="like-btn" disabled>
+                      <span class="reaction__icon">👍</span>
+                      <span class="reaction__label">Like</span>
+                      <span class="reaction__count" id="like-count">0</span>
+                    </button>
+                    <button class="reaction reaction--dislike" id="dislike-btn" disabled>
+                      <span class="reaction__icon">👎</span>
+                      <span class="reaction__label">Dislike</span>
+                      <span class="reaction__count" id="dislike-count">0</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div class="modal__body">
+                <div class="modal__section">
+                  <h3>Synopsis</h3>
+                  <p>${esc(movie.synopsis)}</p>
+                </div>
+                <div class="modal__grid">
+                  <div class="modal__section">
+                    <h3>Director</h3>
+                    <p>${esc(movie.director)}</p>
+                  </div>
+                  <div class="modal__section">
+                    <h3>Starring</h3>
+                    <ul class="modal__cast">
+                      ${movie.cast.map(c => `<li>${esc(c)}</li>`).join('')}
+                    </ul>
+                  </div>
+                </div>
+                <div class="modal__section comments">
+                  <h3>Comments <span class="comments__count" id="comments-count" style="display:none">0</span></h3>
+                  <form class="comments__form" id="comment-form">
+                    <input class="comments__input" type="text" placeholder="Your name" maxlength="50" id="author-input" />
+                    <textarea class="comments__textarea" placeholder="Share your thoughts about this movie..." maxlength="500" rows="3" id="content-input"></textarea>
+                    <p class="comments__error" id="comment-error" style="display:none"></p>
+                    <button class="btn btn--ghost comments__submit" type="submit" id="submit-btn" disabled>Post Comment</button>
+                  </form>
+                  <div class="comments__list" id="comments-list">
+                    <p class="comments__empty">Loading comments...</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+        root.appendChild(overlay);
+
+        overlay.addEventListener('click', (e) => {
+          if (e.target === overlay) closeModal();
+        });
+        overlay.querySelector('.modal__close').addEventListener('click', closeModal);
+        const escHandler = (e) => { if (e.key === 'Escape') closeModal(); };
+        window.addEventListener('keydown', escHandler);
+
+        function closeModal() {
+          overlay.remove();
+          window.removeEventListener('keydown', escHandler);
+          selectedMovie = null;
+          document.body.style.overflow = '';
+        }
+
+        // ── Comments ──────────────────────────────────────────────────────
+        const authorInput = overlay.querySelector('#author-input');
+        const contentInput = overlay.querySelector('#content-input');
+        const submitBtn = overlay.querySelector('#submit-btn');
+        const commentError = overlay.querySelector('#comment-error');
+        const commentsList = overlay.querySelector('#comments-list');
+        const commentsCount = overlay.querySelector('#comments-count');
+
+        function updateSubmitState() {
+          submitBtn.disabled = !authorInput.value.trim() || !contentInput.value.trim();
+        }
+        authorInput.addEventListener('input', updateSubmitState);
+        contentInput.addEventListener('input', updateSubmitState);
+
+        function renderComments(comments) {
+          commentsCount.textContent = comments.length;
+          commentsCount.style.display = comments.length > 0 ? 'inline-flex' : 'none';
+          if (comments.length === 0) {
+            commentsList.innerHTML = '<p class="comments__empty">No comments yet. Be the first to share your thoughts!</p>';
+            return;
+          }
+          commentsList.innerHTML = comments.map(c => `
+            <div class="comment">
+              <div class="comment__avatar">${esc(c.author.charAt(0).toUpperCase())}</div>
+              <div class="comment__body">
+                <div class="comment__header">
+                  <span class="comment__author">${esc(c.author)}</span>
+                  <span class="comment__time">${timeAgo(c.created_at)}</span>
+                </div>
+                <p class="comment__text">${esc(c.content)}</p>
+              </div>
+            </div>
+          `).join('');
+        }
+
+        // Load comments
+        sbSelect('movie_comments', 'id,author,content,created_at', 'movie_id', movie.id)
+          .then(data => renderComments(data || []))
+          .catch(() => {
+            commentsList.innerHTML = '<p class="comments__empty">Could not load comments.</p>';
+          });
+
+        // Submit comment
+        overlay.querySelector('#comment-form').addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const author = authorInput.value.trim();
+          const content = contentInput.value.trim();
+          if (!author || !content) return;
+          submitBtn.textContent = 'Posting...';
+          submitBtn.disabled = true;
+          commentError.style.display = 'none';
+          try {
+            const [inserted] = await sbInsert('movie_comments', { movie_id: movie.id, author, content }, 'id,author,content,created_at');
+            const existing = Array.from(commentsList.querySelectorAll('.comment')).map(el => ({
+              id: el.dataset.id,
+              author: el.querySelector('.comment__author')?.textContent || '',
+              content: el.querySelector('.comment__text')?.textContent || '',
+              created_at: '',
+            }));
+            renderComments([inserted, ...existing.filter(c => c.id)]);
+            contentInput.value = '';
+          } catch {
+            commentError.textContent = 'Could not post your comment. Please try again.';
+            commentError.style.display = 'block';
+          }
+          submitBtn.textContent = 'Post Comment';
+          updateSubmitState();
+        });
+
+        // ── Reactions ─────────────────────────────────────────────────────
+        const likeBtn = overlay.querySelector('#like-btn');
+        const dislikeBtn = overlay.querySelector('#dislike-btn');
+        const likeCount = overlay.querySelector('#like-count');
+        const dislikeCount = overlay.querySelector('#dislike-count');
+        let likes = 0, dislikes = 0, userReaction = null, reacting = false;
+
+        function updateReactionUI() {
+          likeCount.textContent = likes;
+          dislikeCount.textContent = dislikes;
+          likeBtn.classList.toggle('reaction--active', userReaction === 'like');
+          dislikeBtn.classList.toggle('reaction--active', userReaction === 'dislike');
+          likeBtn.disabled = reacting;
+          dislikeBtn.disabled = reacting;
+        }
+
+        const voterId = getVoterId();
+        sbSelect('movie_reactions', 'reaction,voter_id', 'movie_id', movie.id)
+          .then(data => {
+            if (!data) return;
+            const all = data;
+            likes = all.filter(r => r.reaction === 'like').length;
+            dislikes = all.filter(r => r.reaction === 'dislike').length;
+            const mine = all.find(r => r.voter_id === voterId);
+            userReaction = mine ? mine.reaction : null;
+            updateReactionUI();
+          })
+          .catch(() => updateReactionUI());
+
+        async function handleReaction(type) {
+          if (reacting) return;
+          reacting = true;
+          updateReactionUI();
+          try {
+            if (userReaction === type) {
+              await sbDelete('movie_reactions', { movie_id: movie.id, voter_id: voterId });
+              userReaction = null;
+              if (type === 'like') likes--; else dislikes--;
+            } else if (userReaction) {
+              await sbUpdate('movie_reactions', { reaction: type }, { movie_id: movie.id, voter_id: voterId });
+              userReaction = type;
+              if (type === 'like') { likes++; dislikes--; } else { dislikes++; likes--; }
+            } else {
+              await sbInsert('movie_reactions', { movie_id: movie.id, reaction: type, voter_id: voterId }, 'reaction,voter_id');
+              userReaction = type;
+              if (type === 'like') likes++; else dislikes++;
+            }
+          } catch { /* ignore */ }
+          reacting = false;
+          updateReactionUI();
+        }
+
+        likeBtn.addEventListener('click', () => handleReaction('like'));
+        dislikeBtn.addEventListener('click', () => handleReaction('dislike'));
+      }
+
+      // ── Init ──────────────────────────────────────────────────────────────
+      render();
+    </script>
+  </body>
+</html>
